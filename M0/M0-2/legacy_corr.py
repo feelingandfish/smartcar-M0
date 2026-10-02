@@ -4,8 +4,12 @@ import math
 
 CONFIG_PATH = "config.yaml"
 
-with open(CONFIG_PATH) as f:
-    cfg = yaml.safe_load(f)
+try:
+    with open(CONFIG_PATH) as f:
+        cfg = yaml.safe_load(f)
+except FileNotFoundError:
+    print(f"错误：找不到配置文件 {CONFIG_PATH}")
+    exit(1)
 
 csv_path = cfg["input_csv"]
 col_x = cfg["columns"]["x"]
@@ -14,13 +18,21 @@ col_y = cfg["columns"]["y"]
 xs = []
 ys = []
 
-with open(csv_path) as f:
-    reader = csv.DictReader(f)
-    for row in reader:
-        xs.append(float(row[col_x]))
-        ys.append(float(row[col_y]))
+try:
+    with open(csv_path) as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            xs.append(float(row[col_x]))
+            ys.append(float(row[col_y]))
+    n = len(xs)
+except FileNotFoundError:
+    print(f"错误：找不到数据文件 {csv_path}")
+    exit(1)
+except KeyError:
+    print(f"错误：csv 里没有列名 {col_x} 或 {col_y}")
+    exit(1)
 
-n = len(xs)
+
 
 sum_x = 0.0
 sum_y = 0.0
