@@ -4,6 +4,7 @@ import csv
 
 
 def calc_corr(xs, ys):
+    """计算皮尔逊相关系数"""
     n = len(xs)
     sum_x = sum_y = 0.0
     for i in range(n):
@@ -28,13 +29,16 @@ def calc_corr(xs, ys):
 
 
 def main():
-   CONFIG_PATH = "config.yaml"
-   try:
-    with open(CONFIG_PATH) as f:
-        cfg = yaml.safe_load(f)
-   except FileNotFoundError:
-    print(f"错误：找不到配置文件 {CONFIG_PATH}")
-    exit(1)
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--config", default="config.yaml")
+    args = parser.parse_args()
+
+    try:
+        with open(args.config) as f:
+            cfg = yaml.safe_load(f)
+    except FileNotFoundError:
+        print(f"错误：找不到配置文件 {args.config}")
+        exit(1)
 
     csv_path = cfg["input_csv"]
     col_x = cfg["columns"]["x"]
