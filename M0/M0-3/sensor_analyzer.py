@@ -51,9 +51,11 @@ for v in data:
 std = (acc / len(data))**0.5
 
 # --- 剔除离群值 ---
-for v in data:
-    if abs(v-mean)>2 * std:
-        data.remove(v)
+cleaned = []
+for i, v in enumerate(data):
+    if abs(v - mean) <= 2 * std:
+        cleaned.append((times[i], v))
+
 
 # --- 输出清洗后的数据 ---
 output_path =  OUTPUT_FILE
