@@ -48,3 +48,20 @@ for t in config["tasks"]:
     dfs(t["name"])
 
 print("执行顺序：", order)
+#设置随机数种子
+if args.seed:
+    random.seed(args.seed)
+#执行任务
+results=[]
+for name in order:
+    t=tasks_dict[name]
+    print(f"正在执行:{name}")
+    time.sleep(t["duration"])
+#随机判定成功失败
+    if random.random()<t["success_rate"]:
+      print(f"{name}成功")
+      results.append({"name":name,"status":"SUCCESS"})
+    else:
+     print(f"{name}失败")
+     results.append({"name":name,"status":"FAILED"})
+print("执行完毕",results)
