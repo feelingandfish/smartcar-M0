@@ -18,6 +18,8 @@ sensor_analyzer.py  —— 上一届学长留下的"能用"的脚本
 
 import csv
 import os
+import argparse
+
 
 INPUT_FILE = "sensor_data.csv"
 OUTPUT_FILE = "cleaned_data.csv"
@@ -25,10 +27,21 @@ data = []
 times = []
 cleaned = []
 
+parser = argparse.ArgumentParser()
+parser.add_argument("--input", default="sensor_data.csv")
+parser.add_argument("--output", default="cleaned_data.csv")
+args = parser.parse_args()
+INPUT_FILE = args.input
+OUTPUT_FILE = args.output
+
 print("=== 传感器数据分析 ===")
 
 # --- 读取数据 ---
-reader = csv.DictReader(open(INPUT_FILE, "r"))
+try:
+    reader = csv.DictReader(open(INPUT_FILE, "r"))
+except FileNotFoundError:
+    print("错误：找不到文件", INPUT_FILE)
+    exit(1)
 
 for row in reader:
     t = float(row["time"])
