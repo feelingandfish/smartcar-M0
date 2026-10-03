@@ -105,8 +105,9 @@ for name in order:
             print(f"  {name} 失败")
     
     if not success:
-        print(f"  {name} 3次都失败，跳过")
-        results[name] = {"name": name, "status": "SKIPPED", "attempts": 3}
+        if name not in results:
+            print(f"  {name} 3次都失败，跳过")
+            results[name] = {"name": name, "status": "SKIPPED", "attempts": 3}
 
 print("执行完毕")
 for name in order:
