@@ -58,10 +58,58 @@ for name in order:
     print(f"正在执行:{name}")
     time.sleep(t["duration"])
 #随机判定成功失败
-    if random.random()<t["success_rate"]:
-      print(f"{name}成功")
-      results.append({"name":name,"status":"SUCCESS"})
-    else:
-     print(f"{name}失败")
-     results.append({"name":name,"status":"FAILED"})
-print("执行完毕",results)
+results = {}
+start_time = time.time()
+timeout = args.timeout if args.timeout else config.get("timeout", 9999)
+
+for name in order:
+    t = tasks_dict[name]
+    
+    # 检查前置是否失败/跳过
+    skipped = False
+    for dep in t.get("dependencies", []):
+        if results[dep]["status"] in ["SKIPPED", "FAILED", "TIMEOUT"]:
+            skipped = True
+            break
+    if skipped:
+        print(f"  {name} 跳过（依赖失败）")
+        results[name] = {"name": name, "status": "SKIPPED", "attempts": 0}
+        continue
+    
+    # 执行前检查超时
+    elapsed = time.time() - start_time
+    if elapsed > timeout:
+        results[name] = {"name": name, "status": "TIMEOUT", "attempts": 0}
+        continue
+    
+    # 重试最多3次
+    success = False
+    for attempt in range(3):
+        print(f"正在执行：{name}（第{attempt+1}次）")
+        time.sleep(t["duration"])
+        
+        # sleep后检查超时
+        elapsed = time.time() - start_time
+        if elapsed > timeout:
+            print(f"  {name} 超时")
+            results[name] = {"name": name, "status": "TIMEOUT", "attempts": attempt+1}
+            success = False
+            break
+        
+        if random.random() < t["success_rate"]:
+            print(f"  {name} 成功")
+            results[name] = {"name": name, "status": "SUCCESS", "attempts": attempt+1}
+            success = True
+            break
+        else:
+            print(f"  {name} 失败")
+    
+    if not success:
+        print(f"  {name} 3次都失败，跳过")
+        results[name] = {"name": name, "status": "SKIPPED", "attempts": 3}
+
+print("执行完毕")
+for name in order:
+    print(f"  {name}: {results[name]['status']}")
+
+
