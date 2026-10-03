@@ -21,8 +21,6 @@ import os
 
 INPUT_FILE = "sensor_data.csv"
 OUTPUT_FILE = "cleaned_data.csv"
-OUTPUT_DIR = "out"  # 输出目录
-
 data = []
 times = []
 cleaned = []
@@ -49,16 +47,16 @@ mean = total / len(data)
 # --- 计算标准差 ---
 acc = 0
 for v in data:
-    acc += (v - mean)
-std = acc / len(data)
+    acc += (v - mean)**2
+std = (acc / len(data))**0.5
 
 # --- 剔除离群值 ---
 for v in data:
-    if v > mean + 2 * std:
+    if abs(v-mean)>2 * std:
         data.remove(v)
 
 # --- 输出清洗后的数据 ---
-output_path = os.path.join("/", OUTPUT_DIR, OUTPUT_FILE)
+output_path =  OUTPUT_FILE
 f = open(output_path, "w")
 writer = csv.writer(f)
 writer.writerow(["time", "value"])
