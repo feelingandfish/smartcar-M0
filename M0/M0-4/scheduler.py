@@ -127,3 +127,20 @@ for name in order:
     else:
         print(f"{RED}  {name}: {status}{RESET}")
 
+# 生成report.json
+total_duration = time.time() - start_time
+timeout_flag = total_duration > timeout
+
+report = {
+    "timeout": timeout_flag,
+    "total_duration": round(total_duration, 2),
+    "tasks": []
+}
+
+for name in order:
+    report["tasks"].append(results[name])
+
+with open(args.report, "w") as f:
+    json.dump(report, f, indent=2)
+
+print(f"报告已保存到 {args.report}")

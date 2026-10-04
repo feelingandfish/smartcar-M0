@@ -1,0 +1,41 @@
+{
+  "timeout": false,
+  "total_duration": 11.54,
+  "tasks": [
+    {
+      "name": "Init",
+      "status": "SUCCESS",
+      "attempts": 1
+    },
+    {
+      "name": "Navigate",
+      "status": "SUCCESS",
+      "attempts": 1
+    },
+    {
+      "name": "DetectQR",
+      "status": "SUCCESS",
+      "attempts": 1
+    },
+    {
+      "name": "Grasp",
+      "status": "SUCCESS",
+      "attempts": 1
+    },
+    {
+      "name": "AvoidObstacle",
+      "status": "SKIPPED",
+      "attempts": 3
+    },
+    {
+      "name": "Place",
+      "status": "SKIPPED",
+      "attempts": 0
+    },
+    {
+      "name": "ReturnHome",
+      "status": "SKIPPED",
+      "attempts": 0
+    }
+  ]
+}
