@@ -3,13 +3,17 @@ import yaml
 import json
 import time
 import random
+import sys
 
-# 彩色输出
-GREEN = "\033[92m"
-RED = "\033[91m"
-YELLOW = "\033[93m"
-BLUE = "\033[94m"
-RESET = "\033[0m"
+if sys.stdout.isatty():
+    GREEN = "\033[92m"
+    RED = "\033[91m"
+    YELLOW = "\033[93m"
+    BLUE = "\033[94m"
+    RESET = "\033[0m"
+else:
+    GREEN = RED = YELLOW = BLUE = RESET = ""
+
 
 # 读命令行参数
 parser = argparse.ArgumentParser()
@@ -20,14 +24,30 @@ parser.add_argument("--seed", type=int, default=None)
 args = parser.parse_args()
 
 # 读配置文件
-with open(args.config) as f:
-    if args.config.endswith(".json"):
-        config = json.load(f)
-    else:
-        config = yaml.safe_load(f)
+try:
+    # 读配置文件
+    with open(args.config) as f:
+        if args.config.endswith(".json"):
+            config = json.load(f)
+        else:
+            config = yaml.safe_load(f)
+except FileNotFoundError:
+    print("错误：找不到文件", args.config)
+    exit(1)
+except yaml.YAMLError:
+    print("错误：YAML文件格式错误")
+    exit(1)
+except json.JSONDecodeError:
+    print("错误：JSON文件格式错误")
+    exit(1)
+
 
 print("配置读取成功")
 print("任务列表：", [t["name"] for t in config["tasks"]])
+
+if not config.get("tasks"):
+    print("错误：任务列表为空")
+    exit(1)
 
 # 建任务字典
 tasks_dict = {}
@@ -51,10 +71,21 @@ def dfs(name):
     visited[name] = 2
     order.append(name)
 
-for t in config["tasks"]:
-    dfs(t["name"])
+try:
+    for t in config["tasks"]:
+        dfs(t["name"])
+except ValueError as e:
+    print("错误：", e)
+    exit(1)
+
 
 print("执行顺序：", order)
+
+for t in config["tasks"]:
+    if not (0 <= t["success_rate"] <= 1):
+        print("错误：success_rate 必须在0到1之间，任务", t["name"])
+        exit(1)
+
 #设置随机数种子
 if args.seed:
     random.seed(args.seed)
