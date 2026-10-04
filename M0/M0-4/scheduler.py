@@ -90,7 +90,6 @@ for t in config["tasks"]:
 if args.seed:
     random.seed(args.seed)
 #执行任务
-results=[]
 for name in order:
     t=tasks_dict[name]
     print(f"正在执行:{name}")
@@ -102,6 +101,7 @@ timeout = args.timeout if args.timeout else config.get("timeout", 9999)
 
 for name in order:
     t = tasks_dict[name]
+    started = time.time()
     
     # 检查前置是否失败/跳过
     skipped = False
@@ -110,14 +110,16 @@ for name in order:
             skipped = True
             break
     if skipped:
-        print(f"  {name} 跳过（依赖失败）")
-        results[name] = {"name": name, "status": "SKIPPED", "attempts": 0}
+        print(f"{BLUE}  {name} 跳过（依赖失败）{RESET}")
+        results[name] = {"name": name, "status": "SKIPPED", "attempts": 0,
+                         "duration": 0, "started_at": started, "ended_at": started}
         continue
     
     # 执行前检查超时
     elapsed = time.time() - start_time
     if elapsed > timeout:
-        results[name] = {"name": name, "status": "TIMEOUT", "attempts": 0}
+        results[name] = {"name": name, "status": "TIMEOUT", "attempts": 0,
+                         "duration": 0, "started_at": started, "ended_at": started}
         continue
     
     # 重试最多3次
@@ -126,27 +128,29 @@ for name in order:
         print(f"{YELLOW}正在执行：{name}（第{attempt+1}次）{RESET}")
         time.sleep(t["duration"])
         
-        # sleep后检查超时
         elapsed = time.time() - start_time
         if elapsed > timeout:
             print(f"{RED}  {name} 超时{RESET}")
-            results[name] = {"name": name, "status": "TIMEOUT", "attempts": attempt+1}
+            results[name] = {"name": name, "status": "TIMEOUT", "attempts": attempt+1,
+                             "duration": t["duration"], "started_at": started, "ended_at": time.time()}
             success = False
             break
         
         if random.random() < t["success_rate"]:
             print(f"{GREEN}  {name} 成功{RESET}")
-            results[name] = {"name": name, "status": "SUCCESS", "attempts": attempt+1}
+            results[name] = {"name": name, "status": "SUCCESS", "attempts": attempt+1,
+                             "duration": t["duration"], "started_at": started, "ended_at": time.time()}
             success = True
             break
         else:
             print(f"{RED}  {name} 失败{RESET}")
-
     
     if not success:
         if name not in results:
             print(f"{BLUE}  {name} 3次都失败，跳过{RESET}")
-            results[name] = {"name": name, "status": "SKIPPED", "attempts": 3}
+            results[name] = {"name": name, "status": "SKIPPED", "attempts": 3,
+                             "duration": t["duration"], "started_at": started, "ended_at": time.time()}
+
 
 print("执行完毕")
 for name in order:
