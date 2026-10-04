@@ -4,6 +4,13 @@ import json
 import time
 import random
 
+# 彩色输出
+GREEN = "\033[92m"
+RED = "\033[91m"
+YELLOW = "\033[93m"
+BLUE = "\033[94m"
+RESET = "\033[0m"
+
 # 读命令行参数
 parser = argparse.ArgumentParser()
 parser.add_argument("--config", required=True)
@@ -85,32 +92,38 @@ for name in order:
     # 重试最多3次
     success = False
     for attempt in range(3):
-        print(f"正在执行：{name}（第{attempt+1}次）")
+        print(f"{YELLOW}正在执行：{name}（第{attempt+1}次）{RESET}")
         time.sleep(t["duration"])
         
         # sleep后检查超时
         elapsed = time.time() - start_time
         if elapsed > timeout:
-            print(f"  {name} 超时")
+            print(f"{RED}  {name} 超时{RESET}")
             results[name] = {"name": name, "status": "TIMEOUT", "attempts": attempt+1}
             success = False
             break
         
         if random.random() < t["success_rate"]:
-            print(f"  {name} 成功")
+            print(f"{GREEN}  {name} 成功{RESET}")
             results[name] = {"name": name, "status": "SUCCESS", "attempts": attempt+1}
             success = True
             break
         else:
-            print(f"  {name} 失败")
+            print(f"{RED}  {name} 失败{RESET}")
+
     
     if not success:
         if name not in results:
-            print(f"  {name} 3次都失败，跳过")
+            print(f"{BLUE}  {name} 3次都失败，跳过{RESET}")
             results[name] = {"name": name, "status": "SKIPPED", "attempts": 3}
 
 print("执行完毕")
 for name in order:
-    print(f"  {name}: {results[name]['status']}")
-
+    status = results[name]["status"]
+    if status == "SUCCESS":
+        print(f"{GREEN}  {name}: {status}{RESET}")
+    elif status == "SKIPPED":
+        print(f"{BLUE}  {name}: {status}{RESET}")
+    else:
+        print(f"{RED}  {name}: {status}{RESET}")
 
