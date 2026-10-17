@@ -64,7 +64,7 @@ def validate_tasks(config):
         if not (0 <= t["success_rate"] <= 1):
             raise ValueError(f"success_rate 必须在0到1之间，任务 {t['name']}")
 
-# ---------- 执行单个任务 ----------
+# ---------- 执行单个任务（返回状态）----------
 def run_task(name, t, tasks_dict, results, start_time, timeout, C):
     started = time.time()
     # 检查前置是否失败/跳过
@@ -73,12 +73,12 @@ def run_task(name, t, tasks_dict, results, start_time, timeout, C):
             print(f"{C['BLUE']}  {name} 跳过（依赖失败）{C['RESET']}")
             results[name] = {"name": name, "status": "SKIPPED", "attempts": 0,
                              "duration": 0, "started_at": started, "ended_at": started}
-            return
+            return "SKIPPED"
     # 执行前检查超时
     if time.time() - start_time > timeout:
         results[name] = {"name": name, "status": "TIMEOUT", "attempts": 0,
                          "duration": 0, "started_at": started, "ended_at": started}
-        return
+        return "TIMEOUT"
     # 重试最多3次
     for attempt in range(3):
         print(f"{C['YELLOW']}正在执行：{name}（第{attempt+1}次）{C['RESET']}")
@@ -87,16 +87,17 @@ def run_task(name, t, tasks_dict, results, start_time, timeout, C):
             print(f"{C['RED']}  {name} 超时{C['RESET']}")
             results[name] = {"name": name, "status": "TIMEOUT", "attempts": attempt+1,
                              "duration": t["duration"], "started_at": started, "ended_at": time.time()}
-            return
+            return "TIMEOUT"
         if random.random() < t["success_rate"]:
             print(f"{C['GREEN']}  {name} 成功{C['RESET']}")
             results[name] = {"name": name, "status": "SUCCESS", "attempts": attempt+1,
                              "duration": t["duration"], "started_at": started, "ended_at": time.time()}
-            return
+            return "SUCCESS"
         print(f"{C['RED']}  {name} 失败{C['RESET']}")
     print(f"{C['BLUE']}  {name} 3次都失败，跳过{C['RESET']}")
     results[name] = {"name": name, "status": "SKIPPED", "attempts": 3,
                      "duration": t["duration"], "started_at": started, "ended_at": time.time()}
+    return "SKIPPED"
 
 # ---------- 生成报告 ----------
 def generate_report(results, order, start_time, timeout, report_path):
@@ -137,8 +138,16 @@ def main():
     start_time = time.time()
     timeout = args.timeout if args.timeout else config.get("timeout", 9999)
 
+    # 按顺序执行，超时立即终止
     for name in order:
-        run_task(name, tasks_dict[name], tasks_dict, results, start_time, timeout, C)
+        status = run_task(name, tasks_dict[name], tasks_dict, results, start_time, timeout, C)
+        if status == "TIMEOUT":
+            print(f"{C['RED']}超时，立即终止剩余任务{C['RESET']}")
+            # 把后面还没执行的任务直接标记为 TIMEOUT（不执行）
+            for rest in order[order.index(name)+1:]:
+                results[rest] = {"name": rest, "status": "TIMEOUT", "attempts": 0,
+                                 "duration": 0, "started_at": time.time(), "ended_at": time.time()}
+            break
 
     generate_report(results, order, start_time, timeout, args.report)
 
