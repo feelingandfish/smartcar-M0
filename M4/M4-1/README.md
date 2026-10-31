@@ -87,8 +87,6 @@ GPIO = **通用输入/输出**，就是芯片的那些引脚，每个引脚可�
   4. 按按键收到 `[KEY] button pressed`
 - 实测串口日志见 `docs/serial_log.txt`
 
-## 8. 考核必答：主频 / 波特率 / 消抖
-
 ### 8.1 系统主频怎么算
 公式：`SYSCLK = 时钟源 × PLL倍频 ÷ AHB分频`
 本工程：HSI = 8MHz，**PLL 关闭**（不倍频），AHB / APB1 / APB2 均 `/1`
@@ -108,18 +106,4 @@ USART1 挂 APB2，fCK = APB2 = **8MHz**
 2. 主循环里用 `HAL_Delay(20ms)` 消抖，实现简单、好调试
 3. 中断里不宜长时间延时（会阻塞其他中断），且按键优先级低，没必要占用中断资源
 
-## 9. 现场换板（考核重点）
-- 引脚/参数**全部集中在 `src/board_config.h`**（LED 引脚、按键引脚、串口参数、心跳周期、消抖时长）
-- 现场换板只需**修改 board_config.h 一处**（改成新板的 LED/按键所在端口引脚），重新编译烧录即可，10 分钟内跑通
 
-## 10. 交付物结构
-```
-M4-1/
-├── board_notes.md      # 板上资源识别（含引脚表）
-├── src/                # main.c + board_config.h
-├── build/              # 编译产物（.axf/.hex）
-├── docs/
-│   ├── photos/         # 接线照片
-│   └── serial_log.txt  # 串口输出原文
-└── README.md           # 本文件
-```
