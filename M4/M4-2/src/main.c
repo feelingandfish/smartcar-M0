@@ -32,7 +32,7 @@
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
 /* 每圈计数(4倍频) = 磁环每圈7脉冲 × 4倍频 × 减速比50 = 1400，需实测校准 */
-#define ENC_COUNTS_PER_REV  1400
+#define ENC_COUNTS_PER_REV  1385
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
