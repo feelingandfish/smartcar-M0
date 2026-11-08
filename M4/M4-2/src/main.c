@@ -19,7 +19,8 @@ static void MX_USART1_UART_Init(void);
 
 #define IMU_SAMPLE_PERIOD_MS       10U
 #define ENCODER_SAMPLE_PERIOD_MS   1000U
-#define UART_OUTPUT_PERIOD_MS      100U
+#define UART_OUTPUT_PERIOD_MS       10U  /* VOFA+实时曲线按100Hz输出一帧 */
+#define UART_STATUS_PERIOD_MS      500U  /* 校准状态每0.5秒提示一次，避免刷屏 */
 #define DRIFT_TEST_DURATION_MS   60000U
 #define DRIFT_LOG_PERIOD_MS      1000U
 
@@ -183,8 +184,12 @@ int main(void)
                 ((now - last_uart_output_tick) >= UART_OUTPUT_PERIOD_MS))
             {
                 last_uart_output_tick = now;
+                /* FireWater帧：相对时间、加速度XYZ(g)、角速度XYZ(°/s)、
+                 * 加速度俯仰角、陀螺积分角、融合俯仰角(°)。最后一列为最终pitch。
+                 * 时间由本次程序运行的tick差计算，不依赖电脑或日历绝对时间。
+                 */
                 len = snprintf(uartBuf, sizeof(uartBuf),
-                    "T=%.2f ACC[g]:X=%+.3f Y=%+.3f Z=%+.3f GYRO[dps]:X=%+.1f Y=%+.1f Z=%+.1f P_ACC=%+.1f P_GYRO=%+.1f PITCH=%+.1f\r\n",
+                    "d:%.3f,%+.3f,%+.3f,%+.3f,%+.3f,%+.3f,%+.3f,%+.3f,%+.3f,%+.3f\r\n",
                     (float)(now - fusion_start_tick) / 1000.0f,
                     sample.ax_g, sample.ay_g, sample.az_g,
                     gx_corrected_dps, gy_corrected_dps, gz_corrected_dps,
@@ -194,7 +199,7 @@ int main(void)
         }
 
         if (Filter_IsCalibrating(&filter) &&
-            ((now - last_uart_output_tick) >= UART_OUTPUT_PERIOD_MS))
+            ((now - last_uart_output_tick) >= UART_STATUS_PERIOD_MS))
         {
             last_uart_output_tick = now;
             len = snprintf(uartBuf, sizeof(uartBuf), "Gyro calibration %u/%u: keep sensor still\r\n",

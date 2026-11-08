@@ -16,7 +16,7 @@
 | I²C 时钟 | 100 kHz |
 | MPU6050 量程 | 加速度 ±2 g；陀螺仪 ±250 °/s |
 | IMU 更新间隔 | 10 ms，目标采样率 100 Hz |
-| 普通串口文本输出 | 100 ms 一次，约 10 行/秒 |
+| VOFA+ 实时数据帧 | 静置漂移测试结束后每 10 ms 一帧，目标 100 Hz；相对时间和六轴物理量均包含在帧内 |
 | 60 秒漂移记录 | 每约 1 秒一行；一份完整 CSV 有 61 行（起始行加 60 秒记录） |
 | 串口 | USART1，PA9/TX、PA10/RX，115200 baud，8 数据位、无校验、1 停止位（8N1） |
 | 调试与查看 | Keil μVision、ST-Link V2、USB-TTL/CH340、SSCOM；实时曲线测试使用 VOFA+ |
@@ -205,16 +205,18 @@ pitch_fused[k] = 0.99 × pitch_predict + 0.01 × pitch_acc
 
 ### 操作与通道
 
-使用 VOFA+ FireWater 串口连接观察实时曲线。USB-TTL/CH340 选当前设备管理器中的 COM 口，115200、8N1、无流控。此次曲线的四个数据通道定义为：
+使用 VOFA+ FireWater 串口连接观察实时曲线。USB-TTL/CH340 选当前设备管理器中的 COM 口，115200、8N1、无流控。固件以 `d:` 开始一帧，按 100 Hz 输出 10 个逗号分隔数值；时间由本次启动后的 tick 差计算。通道顺序为：
 
 | 通道 | 数据 | 单位 |
 |---|---|---|
-| I0 粉色 | 加速度计算的 pitch | ° |
-| I1 绿色 | Y 轴陀螺仪角速度 | °/s |
-| I2 蓝色 | 纯陀螺仪积分 pitch | ° |
-| I3 橙色 | 互补滤波 pitch | ° |
+| I0 | 相对时间 `t_s` | s |
+| I1–I3 | 加速度计 X/Y/Z | g |
+| I4–I6 | 扣除启动静止零偏后的陀螺仪 X/Y/Z | °/s |
+| I7 | 加速度计算的 pitch | ° |
+| I8 | 补偿零偏后的纯陀螺积分 pitch | ° |
+| I9 | 互补滤波 pitch（最终角度） | ° |
 
-分别对照 I0 与 I3、I1 与 I2，避免角速度和角度在同一个纵轴上互相压缩。VOFA 曲线的横轴是滚动时间窗；负刻度表示当前时刻之前的历史，不是负的实验时间。
+作角度对比图时，在 VOFA+ 中只显示 I7、I8、I9，避免时间、加速度和角速度量纲不同造成纵轴比例失真。I0 是以秒计的本次运行相对时间；VOFA 横轴仍显示滚动时间窗，负刻度表示当前时刻之前的历史。
 
 ### 本次观察与归因
 
@@ -263,7 +265,7 @@ python tools/offline_solve.py --input data\imu_raw.csv --out data\solved.csv
 - docs/plots/drift_60s_comparison.png
 - README.md
 
-目录中暂未找到 encoder.c、mpu6050.c、filter.c、data/rotate_once.csv、docs/analysis.md、VOFA 手动转动曲线图片，也未找到离线解算输出 CSV/SVG。当前 src/main.c 是串口文本输出版本；本次 VOFA 截图采用的四通道 FireWater 流没有在这份 src/main.c 中体现。若考核要求以上交付物，需补齐实际的模块实现文件、手动转动数据/图、分析文档，并把最终 Keil 固件源代码同步到仓库后再作为完整交付提交。
+仓库 `src/main.c` 与当前 Keil 工程的实时输出现已统一为 10 通道 FireWater 帧：时间、六轴物理量和三种 pitch 对照值。仍需补齐的交付项见上方文件状态；Keil 工程中的其他 HAL/CubeMX 工程文件不在此模块化 `src/` 目录内。
 
 ## 整体完成情况
 
