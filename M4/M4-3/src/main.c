@@ -24,6 +24,7 @@
 #include <stdio.h>
 #include "encoder.h"
 #include "motor.h"
+#include "pid.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -33,11 +34,28 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-/* 编码器诊断：每 10ms 采样一次；此阶段只做限时低速点动，不运行 PID。 */
+/* 2.3 阶跃实验：每次只改 PID_TEST_MODE，然后重新编译、下载、采集一组曲线。 */
 #define ENCODER_SAMPLE_MS 10U
-/* 点动测试最多给 25% PWM，且 2 秒后自动停机，避免失控长转。 */
-#define MOTOR_TEST_PWM_LIMIT 250
-#define MOTOR_TEST_DURATION_MS 2000U
+#define PID_TEST_MODE     1       /* 1=P, 2=PI, 3=PID */
+#define PID_TARGET_RPM    60.0f
+#define PID_PWM_LIMIT     500.0f
+#define ENCODER_RPM_SIGN  (-1.0f) /* M:正向点动时编码器原始计数为负，统一反馈方向 */
+
+#if (PID_TEST_MODE == 1)
+  #define TEST_KP 2.0f
+  #define TEST_KI 0.0f
+  #define TEST_KD 0.0f
+#elif (PID_TEST_MODE == 2)
+  #define TEST_KP 2.0f
+  #define TEST_KI 0.8f
+  #define TEST_KD 0.0f
+#elif (PID_TEST_MODE == 3)
+  #define TEST_KP 2.0f
+  #define TEST_KI 0.8f
+  #define TEST_KD 0.01f
+#else
+  #error "PID_TEST_MODE must be 1 (P), 2 (PI), or 3 (PID)"
+#endif
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -53,18 +71,15 @@ TIM_HandleTypeDef htim4;
 UART_HandleTypeDef huart1;
 
 /* USER CODE BEGIN PV */
-static volatile float    actual_rpm = 0.0f;           /* 实测转速 r/min */
-static volatile int32_t  pwm_out    = 0;              /* 当前电机 PWM 命令，-1000~1000 */
-static volatile uint16_t encoder_cnt = 0;             /* 当前 TIM2 原始计数 */
-static volatile int16_t  encoder_delta = 0;           /* 最近 10ms 的计数增量 */
-static volatile uint32_t tick_ms    = 0;              /* 运行时间(ms) */
-static volatile uint8_t  sample_flag = 0;             /* 新采样标志 */
-static char    txbuf[64];
+static PID_t speed_pid;
+static volatile float    actual_rpm = 0.0f;
+static volatile int32_t  pwm_out = 0;
+static volatile uint16_t encoder_cnt = 0;
+static volatile int16_t  encoder_delta = 0;
+static volatile uint32_t tick_ms = 0;
+static volatile uint8_t  sample_flag = 0;
+static char txbuf[96];
 static uint32_t last_led = 0;
-static char rx_line[20];                              /* 串口接收命令缓冲区 */
-static uint8_t rx_length = 0;
-static uint32_t motor_test_deadline = 0;              /* 点动自动停止时刻 */
-static uint8_t motor_test_active = 0;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -89,16 +104,13 @@ static void MX_USART1_UART_Init(void);
 int main(void)
 {
 
-  /* USER CODE BEGIN 1 */
+    /* USER CODE BEGIN 1 */
   uint32_t t_snap;
   uint16_t cnt_snap;
-  int16_t  delta_snap;
-  float    ac_snap;
-  int32_t  pw_snap;
-  int      len;
-  uint8_t  rx_byte;
-  int      command_pwm;
-  char     extra;
+  int16_t delta_snap;
+  float actual_snap;
+  int32_t pwm_snap;
+  int len;
   /* USER CODE END 1 */
 
   /* MCU Configuration--------------------------------------------------------*/
@@ -123,13 +135,17 @@ int main(void)
   MX_TIM3_Init();
   MX_TIM4_Init();
   MX_USART1_UART_Init();
-  /* USER CODE BEGIN 2 */
-  HAL_TIM_Encoder_Start(&htim2, TIM_CHANNEL_ALL);   /* 启动 TIM2 正交编码器计数 */
-  Encoder_Init();                                   /* 记录初始 CNT，避免首个差值错误 */
-  Motor_Init();                                     /* 初始化驱动接口 */
-  Motor_SetPWM(0);                                  /* 上电默认停机；收到 M:数值 命令后才点动 */
-  HAL_UART_Transmit(&huart1, (uint8_t*)"t_s,cnt,delta_cnt,rpm,pwm\r\n", 27, 100);
-  HAL_TIM_Base_Start_IT(&htim4);                    /* 启动 10ms 编码器采样中断 */
+    /* USER CODE BEGIN 2 */
+  HAL_TIM_Encoder_Start(&htim2, TIM_CHANNEL_ALL);
+  Encoder_Init();
+  Motor_Init();
+  PID_Init(&speed_pid, TEST_KP, TEST_KI, TEST_KD, PID_PWM_LIMIT, -PID_PWM_LIMIT);
+  Motor_SetPWM(0);
+  {
+    const char header[] = "t_s,cnt,delta_cnt,target_rpm,actual_rpm,pwm\r\n";
+    HAL_UART_Transmit(&huart1, (uint8_t *)header, sizeof(header) - 1U, 100);
+  }
+  HAL_TIM_Base_Start_IT(&htim4);
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -138,66 +154,30 @@ int main(void)
   {
     /* USER CODE END WHILE */
 
-    /* USER CODE BEGIN 3 */
-    /* 串口命令示例：发送 M:200 点动正转，M:-200 反向点动，M:0 立即停机。
-       点动输出限制在 +/-250(25%)，并在2秒后自动停止；每条命令必须带回车/换行。 */
-    if (HAL_UART_Receive(&huart1, &rx_byte, 1, 0) == HAL_OK) {
-        if (rx_byte == '\r' || rx_byte == '\n') {
-            if (rx_length > 0U) {
-                rx_line[rx_length] = '\0';
-                if (sscanf(rx_line, "M:%d%c", &command_pwm, &extra) == 1 &&
-                    command_pwm >= -MOTOR_TEST_PWM_LIMIT &&
-                    command_pwm <= MOTOR_TEST_PWM_LIMIT) {
-                    if (command_pwm == 0) {
-                        pwm_out = 0;
-                        motor_test_active = 0;
-                        Motor_SetPWM(0);              /* M:0 立即停止 */
-                    } else {
-                        pwm_out = command_pwm;
-                        Motor_SetPWM(command_pwm);    /* 正负号选择方向 */
-                        motor_test_deadline = tick_ms + MOTOR_TEST_DURATION_MS;
-                        motor_test_active = 1;
-                    }
-                }
-                rx_length = 0U;
-            }
-        } else if (rx_length < (sizeof(rx_line) - 1U)) {
-            rx_line[rx_length++] = (char)rx_byte;
-        } else {
-            rx_length = 0U;                            /* 超长输入丢弃，等待下一行 */
-        }
-    }
-
-    /* 额外的保险：即使没有发送停止命令，点动2秒后也会自动关闭 PWM。 */
-    if (motor_test_active && (int32_t)(tick_ms - motor_test_deadline) >= 0) {
-        motor_test_active = 0;
-        pwm_out = 0;
-        Motor_SetPWM(0);
-    }
-
-    /* 每 10ms 输出一行 CSV：时间、原始 CNT、计数差、换算转速、PWM */
+        /* USER CODE BEGIN 3 */
+    /* 2.3 自动阶跃：上电即从 0 给定到 60 r/min；无需串口发送启动命令。 */
     if (sample_flag) {
         __disable_irq();
         t_snap = tick_ms;
         cnt_snap = encoder_cnt;
         delta_snap = encoder_delta;
-        ac_snap = actual_rpm;
-        pw_snap = pwm_out;
+        actual_snap = actual_rpm;
+        pwm_snap = pwm_out;
         sample_flag = 0;
         __enable_irq();
-        len = snprintf(txbuf, sizeof(txbuf), "%.2f,%u,%d,%.1f,%ld\r\n",
+
+        len = snprintf(txbuf, sizeof(txbuf), "%.2f,%u,%d,%.1f,%.1f,%ld\r\n",
                        (double)t_snap / 1000.0, (unsigned int)cnt_snap,
-                       (int)delta_snap, ac_snap, (long)pw_snap);
-        HAL_UART_Transmit(&huart1, (uint8_t*)txbuf, (uint16_t)len, 50);
+                       (int)delta_snap, (double)PID_TARGET_RPM,
+                       (double)actual_snap, (long)pwm_snap);
+        HAL_UART_Transmit(&huart1, (uint8_t *)txbuf, (uint16_t)len, 50);
     }
 
-    /* 调试灯: 每500ms翻转 */
-    if ((tick_ms - last_led) >= 500) {
+    if ((tick_ms - last_led) >= 500U) {
         last_led = tick_ms;
         HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_13);
     }
-  }
-  /* USER CODE END 3 */
+    /* USER CODE END 3 */
 }
 
 /**
@@ -455,7 +435,7 @@ static void MX_GPIO_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
-/* 10ms 诊断中断：读取 TIM2 计数差并计算转速；PWM 由主循环的串口点动命令控制。 */
+/* TIM4 每 10 ms 采样编码器并更新一次速度 PID，确保 dt 与定时周期一致。 */
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 {
     if (htim->Instance == TIM4) {
@@ -465,9 +445,12 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
         tick_ms += ENCODER_SAMPLE_MS;
         encoder_cnt = now_cnt;
         encoder_delta = delta;
-        /* 10ms 窗口：rpm = delta_cnt / 1400 * 60 / 0.01 */
-        actual_rpm = (float)delta * 6000.0f / (float)ENC_COUNTS_PER_REV;
-        sample_flag = 1;
+        actual_rpm = ENCODER_RPM_SIGN * (float)delta * 6000.0f /
+                     (float)ENC_COUNTS_PER_REV;
+        pwm_out = (int32_t)PID_Compute(&speed_pid, PID_TARGET_RPM,
+                                       actual_rpm, 0.010f);
+        Motor_SetPWM(pwm_out);
+        sample_flag = 1U;
     }
 }
 /* USER CODE END 4 */
