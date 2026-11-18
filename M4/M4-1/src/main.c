@@ -67,21 +67,21 @@ int fputc(int ch, FILE *f)
 /* 按键扫描（带消抖）：返回 1 表示"本次刚刚按下" */
 static uint8_t Key_Scan(void)
 {
-  static uint8_t last_state = 1;               /* 记录上一次电平：1=松开 */
-  uint8_t cur = HAL_GPIO_ReadPin(KEY_PORT, KEY_PIN);
+  static uint8_t last_pressed = 0;                  /* 上次是否按下：0=松开 */
+  uint8_t cur_pressed = KEY_IS_PRESSED() ? 1 : 0;   /* 按下=1，极性由 board_config.h 决定 */
 
-  if (last_state == 1 && cur == 0)             /* 检测到"松开→按下"边沿 */
+  if (last_pressed == 0 && cur_pressed == 1)        /* 检测到"松开→按下"边沿 */
   {
-    HAL_Delay(KEY_DEBOUNCE_MS);               /* 消抖：跳过机械抖动窗口 */
-    if (HAL_GPIO_ReadPin(KEY_PORT, KEY_PIN) == 0)  /* 再读一次，确认仍按下 */
+    HAL_Delay(KEY_DEBOUNCE_MS);                     /* 消抖：跳过机械抖动窗口 */
+    if (KEY_IS_PRESSED())                           /* 再读一次，确认仍按下 */
     {
-      last_state = 0;
-      return 1;                               /* 确认按下，返回1 */
+      last_pressed = 1;
+      return 1;                                     /* 确认按下，返回1 */
     }
   }
-  if (cur == 1)
+  if (cur_pressed == 0)
   {
-    last_state = 1;                           /* 已松开，更新状态 */
+    last_pressed = 0;                               /* 已松开，更新状态 */
   }
   return 0;
 }
@@ -226,25 +226,25 @@ static void MX_GPIO_Init(void)
 
   /* USER CODE END MX_GPIO_Init_1 */
 
-  /* GPIO Ports Clock Enable */
-  __HAL_RCC_GPIOC_CLK_ENABLE();
-  __HAL_RCC_GPIOA_CLK_ENABLE();
+  /* GPIO Ports Clock Enable：端口来自 board_config.h，换板只改那里 */
+  LED_PORT_CLK_ENABLE();
+  KEY_PORT_CLK_ENABLE();
 
-  /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_RESET);
+  /*Configure GPIO pin Output Level：极性也来自 board_config.h */
+  HAL_GPIO_WritePin(LED_PORT, LED_PIN, LED_INIT_LEVEL);
 
-  /*Configure GPIO pin : PC13 */
-  GPIO_InitStruct.Pin = GPIO_PIN_13;
+  /*Configure GPIO pin : LED */
+  GPIO_InitStruct.Pin = LED_PIN;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-  HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
+  HAL_GPIO_Init(LED_PORT, &GPIO_InitStruct);
 
-  /*Configure GPIO pin : PA0 */
-  GPIO_InitStruct.Pin = GPIO_PIN_0;
+  /*Configure GPIO pin : KEY */
+  GPIO_InitStruct.Pin = KEY_PIN;
   GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
-  GPIO_InitStruct.Pull = GPIO_PULLUP;
-  HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+  GPIO_InitStruct.Pull = KEY_PULL;
+  HAL_GPIO_Init(KEY_PORT, &GPIO_InitStruct);
 
   /* USER CODE BEGIN MX_GPIO_Init_2 */
 
